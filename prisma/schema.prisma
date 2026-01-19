@@ -1,0 +1,235 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipRole {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum AuditAction {
+  ORG_CREATE
+  ORG_UPDATE
+  INVITE_SEND
+  INVITE_ACCEPT
+  SPACE_CREATE
+  SPACE_UPDATE
+  SPACE_DELETE
+  FOLDER_CREATE
+  FOLDER_UPDATE
+  FOLDER_DELETE
+  PAGE_CREATE
+  PAGE_UPDATE
+  PAGE_DELETE
+  PAGE_RESTORE
+}
+
+model User {
+  id            String        @id @default(cuid())
+  name          String?
+  email         String?       @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  memberships  Membership[]
+  invitesSent  Invite[]       @relation("InviteSender")
+  auditEntries AuditLog[]     @relation("AuditActor")
+  pagesCreated Page[]         @relation("PageCreatedBy")
+  pagesUpdated Page[]         @relation("PageUpdatedBy")
+  revisions    PageRevision[]
+}
+
+model Organization {
+  id          String        @id @default(cuid())
+  name        String
+  slug        String        @unique
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  memberships Membership[]
+  invites     Invite[]
+  spaces      Space[]
+  folders     Folder[]
+  pages       Page[]
+  revisions   PageRevision[]
+  auditLogs   AuditLog[]
+}
+
+model Membership {
+  id             String         @id @default(cuid())
+  userId         String
+  organizationId String
+  role           MembershipRole @default(VIEWER)
+  createdAt      DateTime       @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+model Invite {
+  id             String         @id @default(cuid())
+  organizationId String
+  email          String
+  role           MembershipRole @default(VIEWER)
+  token          String?        @unique
+  code           String?        @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  invitedById    String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User?        @relation("InviteSender", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([email])
+}
+
+model Space {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  description    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  folders      Folder[]
+  pages        Page[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model Folder {
+  id             String     @id @default(cuid())
+  organizationId String
+  spaceId        String
+  parentId       String?
+  name           String
+  slug           String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  space        Space        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  parent       Folder?      @relation("FolderParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Folder[]     @relation("FolderParent")
+  pages        Page[]
+
+  @@unique([spaceId, slug])
+  @@index([organizationId])
+  @@index([spaceId])
+}
+
+model Page {
+  id             String       @id @default(cuid())
+  organizationId String
+  spaceId        String
+  folderId       String?
+  title          String
+  slug           String
+  content        String       @db.LongText
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  createdById    String?
+  updatedById    String?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  space        Space         @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  folder       Folder?       @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdBy    User?         @relation("PageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User?         @relation("PageUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  revisions    PageRevision[]
+
+  @@unique([spaceId, slug])
+  @@index([organizationId])
+  @@index([spaceId])
+  @@index([folderId])
+  @@fulltext([title, content])
+}
+
+model PageRevision {
+  id             String      @id @default(cuid())
+  organizationId String
+  pageId         String
+  title          String
+  content        String      @db.LongText
+  version        Int
+  createdAt      DateTime    @default(now())
+  createdById    String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  page         Page         @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([pageId])
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  organizationId String
+  actorId        String?
+  action         AuditAction
+  targetType     String
+  targetId       String?
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([actorId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
