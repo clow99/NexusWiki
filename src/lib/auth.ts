@@ -15,6 +15,7 @@ export const authOptions: NextAuthOptions = {
     Google({
       clientId: authEnv.GOOGLE_CLIENT_ID,
       clientSecret: authEnv.GOOGLE_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   secret: authEnv.NEXTAUTH_SECRET,

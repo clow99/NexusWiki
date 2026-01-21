@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
 import { auth } from "@/lib/auth";
@@ -13,17 +14,19 @@ export async function getCurrentUser() {
 export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) {
-    throw new Error("Unauthorized");
+    redirect("/signin");
   }
   return user;
 }
 
-export function getActiveOrgId() {
-  return cookies().get(ACTIVE_ORG_COOKIE)?.value ?? null;
+export async function getActiveOrgId() {
+  const cookieStore = await cookies();
+  return cookieStore.get(ACTIVE_ORG_COOKIE)?.value ?? null;
 }
 
-export function setActiveOrgId(orgId: string) {
-  cookies().set(ACTIVE_ORG_COOKIE, orgId, {
+export async function setActiveOrgId(orgId: string) {
+  const cookieStore = await cookies();
+  cookieStore.set(ACTIVE_ORG_COOKIE, orgId, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -32,8 +35,11 @@ export function setActiveOrgId(orgId: string) {
 }
 
 export async function getActiveMembership() {
-  const user = await requireUser();
-  const orgId = getActiveOrgId();
+  const user = await getCurrentUser();
+  if (!user) {
+    return null;
+  }
+  const orgId = await getActiveOrgId();
   if (!orgId) {
     return null;
   }

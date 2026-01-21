@@ -131,7 +131,7 @@ export async function acceptInvite(formData: FormData) {
     },
   });
 
-  setActiveOrgId(invite.organizationId);
+  await setActiveOrgId(invite.organizationId);
   revalidatePath("/orgs");
   redirect("/spaces");
 }
